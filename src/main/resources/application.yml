@@ -1,0 +1,30 @@
+server:
+  port: 48081
+  servlet:
+    context-path: /fscps
+
+spring:
+  application:
+    name: mock-fns-server
+  datasource:
+    url: jdbc:postgresql://localhost:5432/mockfns
+    username: mockfns
+    password: mockfns123
+    driver-class-name: org.postgresql.Driver
+
+mybatis:
+  mapper-locations: classpath:mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    default-fetch-size: 100
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    com.cj.freshway.mock: DEBUG
+    com.cj.freshway.fs: DEBUG

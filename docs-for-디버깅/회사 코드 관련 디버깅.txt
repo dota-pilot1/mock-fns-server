@@ -1,0 +1,61 @@
+================================================================
+coId(회사코드) 관련 디버깅
+================================================================
+
+■ 증상
+  매장 선택 후 [조회] 클릭 시 달력에 상태 배지가 표시되지 않음.
+  저장 후 재조회할 때만 배지가 정상 표시됨.
+
+■ 원인
+  프론트에서 API 호출 시 coId를 session?.coId로 전달하는데,
+  mock 환경에서는 세션에 coId가 없거나 빈값("")인 경우가 있음.
+
+  DB 시드 데이터는 coId = 'FW00'으로 저장되어 있으므로,
+  coId가 빈값이면 WHERE co_id = '' 조건으로 0건 반환됨.
+
+  저장 시에는 프론트에서 'FW00' 기본값을 직접 넣어주고 있어서
+  저장 → 재조회 때는 정상 동작했던 것.
+
+  ┌──────────────────────────────────────────────┐
+  │ 프론트 (ShopScheduleMng.jsx)                 │
+  │   coId: session?.coId || 'FW00'              │
+  │         ↑ session?.coId가 undefined면 'FW00'  │
+  │         ↑ session?.coId가 ''(빈문자)면 ''     │  ← 문제!
+  └──────────────────────────────────────────────┘
+
+  || 연산자는 빈문자열('')도 falsy로 처리하지만,
+  실제 session.coId가 빈문자열이 아닌 다른 값(예: null이 아닌 빈객체)
+  으로 들어올 수 있어 기본값 'FW00'이 적용되지 않는 경우가 발생.
+
+■ 해결
+  mock 서버 컨트롤러에서 coId 기본값 처리 추가.
+
+  [ShopScheduleController.java]
+  조회/저장 모두 coId가 null 또는 빈값이면 'FW00'으로 세팅:
+
+    if (dto.getCoId() == null || dto.getCoId().isEmpty()) {
+        dto.setCoId("FW00");
+    }
+
+  [StoreMstController.java]
+  매장 목록 조회에서도 동일 처리:
+
+    if (dto.getCoId() == null || dto.getCoId().isEmpty()) {
+        dto.setCoId("FW00");
+    }
+
+■ 영향 범위
+  mock 서버의 모든 API에서 coId를 사용하는 경우 동일 이슈 가능.
+  새 API 추가 시 coId 기본값 처리를 습관적으로 넣어줄 것.
+
+  | API                          | coId 기본값 처리 |
+  |------------------------------|-----------------|
+  | selectScheduleMonthList      | O (수정완료)     |
+  | saveSchedule                 | O (수정완료)     |
+  | selectstorelst (매장목록)     | O (신규생성 시)  |
+  | allClCmCodeList (공통코드)    | X (coId 미사용)  |
+
+■ 참고: 실무 서버와의 차이
+  실무 서버에서는 로그인 시 세션에 coId가 항상 세팅되므로
+  이 문제가 발생하지 않음.
+  mock 서버에서만 발생하는 환경 차이 이슈임.

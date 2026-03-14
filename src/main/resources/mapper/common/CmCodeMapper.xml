@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.cj.freshway.fs.cps.common.code.CmCodeMapper">
+
+    <sql id="allColumns">
+        comm_cl_cd, comm_cd, comm_cd_nm, dflt_yn, up_comm_cd,
+        chartr_ref1, chartr_ref2, chartr_ref3, chartr_ref4, chartr_ref5,
+        num_ref1, num_ref2, num_ref3, num_ref4, num_ref5
+    </sql>
+
+    <!-- 단일 분류코드 조회 -->
+    <select id="selectCodeList" parameterType="com.cj.freshway.fs.cps.common.code.dto.CmCodeSearchDto"
+            resultType="com.cj.freshway.fs.cps.common.code.entity.CmCode">
+        SELECT <include refid="allColumns"/>
+          FROM fscps.cm_code_m_if
+         WHERE use_yn = 'Y'
+           AND comm_cl_cd = #{commClCd}
+        <if test="upCommCd != null and upCommCd != ''">
+           AND up_comm_cd = #{upCommCd}
+        </if>
+        <if test="upCommCd == null or upCommCd == ''">
+           AND up_comm_cd IS NULL
+        </if>
+         ORDER BY COALESCE(lnup_ord::integer, 0), comm_cd
+    </select>
+
+    <!-- 전체 공통코드 조회 (로그인 시 호출) -->
+    <select id="selectAllClCmCodeList"
+            resultType="com.cj.freshway.fs.cps.common.code.entity.CmCode">
+        SELECT cm.comm_cl_cd
+             , cm.comm_cd
+             , cm.comm_cd_nm
+             , cm.dflt_yn
+             , cm.up_comm_cd
+             , cm.chartr_ref1
+             , cm.chartr_ref2
+             , cm.chartr_ref3
+             , cm.chartr_ref4
+             , cm.chartr_ref5
+             , cm.num_ref1
+             , cm.num_ref2
+             , cm.num_ref3
+             , cm.num_ref4
+             , cm.num_ref5
+          FROM fscps.cm_cl_code_m_if cl
+         INNER JOIN fscps.cm_code_m_if cm
+            ON cl.comm_cl_cd = cm.comm_cl_cd
+         WHERE cl.use_yn = 'Y'
+           AND cm.use_yn = 'Y'
+         ORDER BY cm.comm_cl_cd, COALESCE(cm.lnup_ord::integer, 0), cm.comm_cd
+    </select>
+
+</mapper>

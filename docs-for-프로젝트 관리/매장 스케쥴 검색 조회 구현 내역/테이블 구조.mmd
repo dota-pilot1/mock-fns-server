@@ -1,0 +1,67 @@
+---
+title: 매장 스케줄 검색 조회 — DB 테이블 구조
+---
+
+erDiagram
+    BS_AIRSTAR_STORE {
+        varchar(20) co_id PK "회사 ID"
+        varchar(50) store_id PK "AIRSTAR 매장 ID"
+        varchar(20) store_type_cd "매장 유형 (AS003: STANDALONE, FOODCOURT, CORNER, POPUP, KIOSK)"
+        varchar(50) ste_id "사이트 코드 (FS438: 2650=인천T1, 2660=인천T2, ...)"
+        varchar(200) store_name_ko "매장 한글명"
+        varchar(200) store_name_en "매장 영문명"
+        varchar(200) store_name_jp "매장 일본어명"
+        varchar(200) store_name_zh_cn "매장 중문간체명"
+        varchar(200) store_name_zh_tw "매장 중문번체명"
+        varchar(1) use_yn "사용여부 (Y/N)"
+        varchar(50) regr_id "등록자"
+        timestamp reg_dttm "등록일시"
+        varchar(50) updt_id "수정자"
+        timestamp updt_dttm "수정일시"
+    }
+
+    BS_AIRSTAR_STORE_SCHEDULE {
+        varchar(20) co_id PK "회사 ID"
+        varchar(50) store_id PK "매장 ID (FK)"
+        varchar(8) schedule_date PK "적용일자 (YYYYMMDD)"
+        varchar(20) open_status "스케줄 상태 (AS009: OPEN, CLOSED, HOLIDAY_CLOSED, ...)"
+        numeric schedule_priority "우선순위 (1~9, 자동계산)"
+        varchar(6) open_time "오픈시간 (HHmmss)"
+        varchar(6) last_order_time "라스트오더시간 (HHmmss)"
+        varchar(6) close_time "닫는시간 (HHmmss)"
+        text closed_reason_kor "휴무사유 (한글)"
+        text closed_reason_en "휴무사유 (영어)"
+        text closed_reason_jp "휴무사유 (일본어)"
+        text closed_reason_zh_cn "휴무사유 (중문간체)"
+        text closed_reason_zh_tw "휴무사유 (중문번체)"
+        varchar(1) use_yn "사용여부 (Y/N)"
+        varchar(1) sync_status "연동상태 (C:FS생성, S:Airstar연동, F:실패)"
+        varchar(50) regr_id "등록자"
+        timestamp reg_dttm "등록일시"
+        varchar(50) updt_id "수정자"
+        timestamp updt_dttm "수정일시"
+    }
+
+    CM_CL_CODE_M_IF {
+        varchar(20) comm_cl_cd PK "분류코드"
+        varchar(100) comm_cl_cd_nm "분류코드명"
+        varchar(1) use_yn "사용여부"
+    }
+
+    CM_CODE_M_IF {
+        varchar(20) comm_cl_cd PK "분류코드 (FK)"
+        varchar(50) comm_cd PK "공통코드"
+        varchar(200) comm_cd_nm "공통코드명"
+        varchar(1) dflt_yn "기본값여부"
+        varchar(50) up_comm_cd "상위코드"
+        varchar(10) lnup_ord "정렬순서"
+        varchar(200) chartr_ref1 "참조1"
+        varchar(200) chartr_ref2 "참조2"
+        varchar(1) use_yn "사용여부"
+    }
+
+    BS_AIRSTAR_STORE ||--o{ BS_AIRSTAR_STORE_SCHEDULE : "1:N 스케줄"
+    CM_CL_CODE_M_IF ||--o{ CM_CODE_M_IF : "1:N 코드"
+
+    BS_AIRSTAR_STORE }o--|| CM_CODE_M_IF : "store_type_cd → AS003"
+    BS_AIRSTAR_STORE_SCHEDULE }o--|| CM_CODE_M_IF : "open_status → AS009"

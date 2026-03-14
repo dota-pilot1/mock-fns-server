@@ -1,0 +1,17 @@
+version: '3.8'
+services:
+  mockfns-db:
+    image: postgres:15
+    container_name: mockfns-db
+    environment:
+      POSTGRES_DB: mockfns
+      POSTGRES_USER: mockfns
+      POSTGRES_PASSWORD: mockfns123
+    ports:
+      - "5432:5432"
+    volumes:
+      - mockfns-data:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  mockfns-data:
