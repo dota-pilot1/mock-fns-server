@@ -10,7 +10,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 })
 @MapperScan({
 	"com.cj.freshway.fs.cps.airstar",
-	"com.cj.freshway.fs.cps.common.code"
+	"com.cj.freshway.fs.cps.common.code",
+	"com.cj.freshway.fs.cps.common.userInfo"
 })
 public class MockScheduleServerApplication {
 

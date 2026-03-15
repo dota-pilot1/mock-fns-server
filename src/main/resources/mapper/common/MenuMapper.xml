@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.cj.freshway.fs.cps.common.userInfo.MenuMapper">
+
+    <resultMap id="MenuResultMap" type="com.cj.freshway.fs.cps.common.userInfo.dto.MenuDto">
+        <result column="prog_no" property="no" jdbcType="VARCHAR" />
+        <result column="prog_cd" property="id" jdbcType="VARCHAR" />
+        <result column="prog_nm" property="menuName" jdbcType="VARCHAR" />
+        <result column="prog_lvl" property="depth" jdbcType="INTEGER" />
+        <result column="prog_url" property="componentName" jdbcType="VARCHAR" />
+        <result column="prog_url_args" property="component" jdbcType="VARCHAR" />
+    </resultMap>
+
+    <!-- 메뉴 목록 조회 (3단 계층: progLvl 3,4,5) — 권한 체크 생략(mock) -->
+    <select id="selectMenuList" parameterType="java.util.Map" resultMap="MenuResultMap">
+        SELECT *
+          FROM (
+            SELECT a.prog_cd
+                 , CASE WHEN b.prog_nm IS NOT NULL THEN b.prog_nm ELSE a.prog_nm END AS prog_nm
+                 , SUBSTRING(a.prog_no::varchar, 1, LENGTH(a.prog_no) - 2) AS up_prog_no
+                 , a.prog_no
+                 , #{progLvl} - 3 AS prog_lvl
+                 , a.prog_url
+                 , a.prog_url_args
+              FROM fscps.cm_program_m a
+              LEFT OUTER JOIN fscps.cm_program_language_m b
+                ON a.prog_cd = b.prog_cd AND b.lang_cl = 'ko'
+             WHERE a.use_yn = 'Y'
+               AND a.menu_yn = 'Y'
+               AND a.system_cl = 'FSBO'
+               AND a.prog_lvl = #{progLvl}::int
+             ORDER BY a.prog_no
+          ) tb
+         WHERE 1 = 1
+        <if test="upProgNo != null and upProgNo != ''">
+           AND tb.up_prog_no = #{upProgNo}
+        </if>
+    </select>
+
+    <!-- 권한 목록 — mock: 활성 프로그램 전체에 ALL 권한 부여 -->
+    <select id="selectAuthList" resultType="com.cj.freshway.fs.cps.common.userInfo.dto.AuthDto">
+        SELECT a.prog_url AS url
+             , '1' AS search_yn
+             , '1' AS new_yn
+             , '1' AS delete_yn
+             , '1' AS save_yn
+             , '1' AS print_yn
+             , '1' AS btn1_yn
+             , '1' AS btn2_yn
+             , '1' AS btn3_yn
+             , '1' AS btn4_yn
+             , '1' AS btn5_yn
+             , '1' AS btn6_yn
+             , '1' AS btn7_yn
+             , '1' AS btn8_yn
+             , '1' AS btn9_yn
+             , '1' AS btn10_yn
+             , 'Y' AS use_yn
+          FROM fscps.cm_program_m a
+         WHERE a.use_yn = 'Y'
+           AND a.system_cl = 'FSBO'
+           AND a.prog_url IS NOT NULL
+           AND a.prog_url != ''
+         ORDER BY a.prog_no
+    </select>
+
+</mapper>
