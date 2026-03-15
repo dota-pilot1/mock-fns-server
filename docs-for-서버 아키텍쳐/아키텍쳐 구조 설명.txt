@@ -1,0 +1,204 @@
+================================================================================
+  mock-fns-server 패키지 구조 및 아키텍쳐 분석
+================================================================================
+
+■ 프로젝트 개요
+  - FSCPS 프론트엔드 UI 테스트를 위한 Mock API 서버
+  - 실제 백엔드를 간소화하여 시뮬레이션하는 DB 기반 목서버
+  - 서버 포트: 48081, Context Path: /fscps
+  - Base URL: http://localhost:48081/fscps
+
+================================================================================
+1. 기술 스택
+================================================================================
+  - Spring Boot 4.0.3 + Java 17
+  - MyBatis 4.0.1 (ORM)
+  - PostgreSQL 15 (Docker Compose)
+  - SpringDoc OpenAPI 2.8.6 (Swagger UI)
+  - Lombok (코드 생성)
+  - Gradle 9.3.1 (빌드)
+
+================================================================================
+2. 아키텍쳐 패턴: 3계층 레이어드 아키텍쳐
+================================================================================
+
+  ┌─────────────────────────────────────────────┐
+  │              Controller Layer               │ ← REST 엔드포인트, 요청/응답 매핑
+  │         (*Controller.java)                  │   Map<String, Object> 반환
+  ├─────────────────────────────────────────────┤
+  │               Service Layer                 │ ← 비즈니스 로직, 트랜잭션 관리
+  │          (*Service.java)                    │   데이터 검증, 가공
+  ├─────────────────────────────────────────────┤
+  │            Mapper Layer (MyBatis)           │ ← DB 접근 추상화
+  │    Java Interface (*Mapper.java)            │   SQL 실행 (XML 매핑)
+  │    XML Mapping   (*Mapper.xml)              │
+  ├─────────────────────────────────────────────┤
+  │          DTO & Entity Layer                 │ ← 요청 DTO, DB 엔티티
+  │    dto/*Dto.java  entity/*Entity.java       │   @Data (Lombok)
+  └─────────────────────────────────────────────┘
+
+================================================================================
+3. 패키지 구조 (src/main/java)
+================================================================================
+
+  com.cj.freshway/
+  ├── mock/                                      # Mock 서버 설정
+  │   ├── MockScheduleServerApplication.java     # 메인 진입점 (@SpringBootApplication)
+  │   └── config/
+  │       ├── CorsConfig.java                    # CORS 필터 (모든 origin 허용)
+  │       └── SwaggerConfig.java                 # OpenAPI 문서 설정
+  │
+  └── fs/cps/                                    # 실제 비즈니스 도메인
+      ├── common/                                # ── 공통 기능 ──
+      │   ├── base/
+      │   │   └── FscpsBaseController.java       # 베이스 컨트롤러
+      │   ├── code/                              # 공통코드 관리
+      │   │   ├── MockCommonCodeController.java  #   코드 조회 API
+      │   │   ├── CmCodeService.java             #   코드 서비스
+      │   │   ├── CmCodeMapper.java              #   코드 매퍼
+      │   │   ├── dto/CmCodeSearchDto.java       #   검색 조건 DTO
+      │   │   └── entity/CmCode.java             #   코드 엔티티
+      │   ├── popup/
+      │   │   └── MockShopPopupController.java   # 매장/사이트 팝업 (하드코딩)
+      │   ├── sso/
+      │   │   └── MockSsoLoginController.java    # SSO 로그인 (고정 토큰)
+      │   └── userInfo/
+      │       ├── MockUserInfoController.java    # 사용자 정보 + 메뉴 + 권한
+      │       ├── MenuMapper.java                # 메뉴 매퍼
+      │       └── dto/
+      │           ├── MenuDto.java               # 메뉴 DTO
+      │           └── AuthDto.java               # 권한 DTO
+      │
+      ├── airstar/                               # ── 에어스타 (인천공항) ──
+      │   ├── storemng/                          # 매장 스케줄 관리
+      │   │   ├── ShopScheduleController.java    #   스케줄 CRUD API
+      │   │   ├── ShopScheduleService.java       #   스케줄 비즈니스 로직
+      │   │   ├── ShopScheduleMapper.java        #   스케줄 매퍼
+      │   │   ├── dto/ShopScheduleSearchDto.java #   검색 DTO
+      │   │   └── entity/ShopScheduleEntity.java #   스케줄 엔티티
+      │   │
+      │   └── storemstmng/                       # 매장 마스터 관리
+      │       ├── StoreMstController.java        #   매장 조회 API
+      │       ├── StoreMstMapper.java            #   매장 매퍼
+      │       ├── dto/StoreMstSearchDto.java     #   검색 DTO
+      │       └── entity/StoreMstEntity.java     #   매장 엔티티
+      │
+      └── dboard/                                # ── 대시보드 ──
+          └── MockDboardController.java          # 빈 응답 (placeholder)
+
+================================================================================
+4. 리소스 구조 (src/main/resources)
+================================================================================
+
+  resources/
+  ├── application.yml                 # Spring 설정 (DB, MyBatis, 로깅)
+  ├── mapper/                         # MyBatis XML 매퍼
+  │   ├── airstar/
+  │   │   ├── storemng/ShopScheduleMapper.xml
+  │   │   └── storemstmng/StoreMstMapper.xml
+  │   └── common/
+  │       ├── CmCodeMapper.xml
+  │       └── MenuMapper.xml
+  └── sql/                            # DB 초기화 스크립트
+      ├── init.sql                    # 스키마 + 스케줄 시드 데이터
+      ├── init-menu.sql               # 메뉴 마스터 + 다국어
+      ├── init-store.sql              # 매장 마스터 데이터
+      └── init-common-code.sql        # 공통코드 분류
+
+================================================================================
+5. API 엔드포인트 구성
+================================================================================
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ 영역         │ 엔드포인트                              │ 방식  │ 설명  │
+  ├──────────────┼─────────────────────────────────────────┼───────┼───────┤
+  │ 인증         │ GET  /user/login                        │ GET   │ 토큰  │
+  │              │ GET  /sso/login                         │ GET   │ SSO   │
+  │              │ GET  /user/refreshToken                 │ GET   │ 갱신  │
+  │              │ POST /api/userInfo/v1.0                 │ POST  │ 사용자│
+  ├──────────────┼─────────────────────────────────────────┼───────┼───────┤
+  │ 공통코드     │ POST /api/common/code/v1.0              │ POST  │ 분류별│
+  │              │ POST /api/common/code/v1.0/allClCmCode  │ POST  │ 전체  │
+  ├──────────────┼─────────────────────────────────────────┼───────┼───────┤
+  │ 팝업         │ POST /api/common/shopRtrvPop/v1.0/list  │ POST  │ 매장  │
+  │              │ POST /api/common/steRtrvPop/v1.0/list   │ POST  │ 사이트│
+  ├──────────────┼─────────────────────────────────────────┼───────┼───────┤
+  │ 매장스케줄   │ POST .../selectScheduleMonthList        │ POST  │ 월별  │
+  │              │ POST .../selectScheduleRangeList        │ POST  │ 범위  │
+  │              │ POST .../saveSchedule                   │ POST  │ 단건  │
+  │              │ POST .../saveScheduleBatch              │ POST  │ 일괄  │
+  ├──────────────┼─────────────────────────────────────────┼───────┼───────┤
+  │ 매장마스터   │ POST .../selectstorelst                 │ POST  │ 조회  │
+  ├──────────────┼─────────────────────────────────────────┼───────┼───────┤
+  │ 대시보드     │ POST .../selectSalesStatus 외 5개       │ POST  │ 빈값  │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+6. 표준 응답 포맷
+================================================================================
+
+  {
+    "code": "200" 또는 "500",
+    "message": "성공/실패 메시지",
+    "data": { ... },
+    "lastRow": n
+  }
+
+================================================================================
+7. DB 설정
+================================================================================
+
+  - URL:      jdbc:postgresql://localhost:5432/mockfns
+  - User:     mockfns / mockfns123
+  - Docker:   mockfns-db (PostgreSQL 15), 볼륨: mockfns-data
+  - 초기화:   sql/init.sql (Docker 최초 실행시 자동)
+
+  주요 테이블:
+  ┌──────────────────────────────────────┬─────────────────────────────┐
+  │ 테이블                               │ 용도                        │
+  ├──────────────────────────────────────┼─────────────────────────────┤
+  │ fscps.bs_airstar_store_schedule      │ 매장 스케줄 (PK: co+store+date)│
+  │ fscps.bs_airstar_store               │ 매장 마스터 (PK: co+store)    │
+  │ fscps.cm_program_m                   │ 메뉴 마스터 (계층 구조)       │
+  │ fscps.cm_program_language_m          │ 메뉴 다국어                  │
+  │ fscps.cm_cl_code_m_if                │ 코드 분류 마스터              │
+  │ fscps.cm_code_m_if                   │ 공통코드 마스터 (20+분류)     │
+  └──────────────────────────────────────┴─────────────────────────────┘
+
+================================================================================
+8. 주요 비즈니스 로직
+================================================================================
+
+  ▶ 스케줄 우선순위 자동 계산 (ShopScheduleService)
+    openStatus → priority 자동 매핑:
+      PAUSED → 1 (최고)    PERMANENTLY_CLOSED → 2
+      HOLIDAY_CLOSED → 3   TEMPORARILY_CLOSED → 4
+      CLOSED → 5           SOLD_OUT → 6
+      BREAK_TIME → 7       OPENING_SOON → 8
+      OPEN → 9 (최저)
+
+  ▶ 메뉴 계층 구조 (MenuMapper)
+    Lv3(GNB) → Lv4(LNB) → Lv5(화면)
+    prog_no 자릿수: 6자리 → 8자리 → 10자리
+
+  ▶ 인증 (MockSsoLoginController)
+    고정 사용자: yjlee (이유진) / 회사: FW00 (CJ프레시웨이)
+    토큰 30초 갱신 주기
+
+================================================================================
+9. 설정 및 특이사항
+================================================================================
+
+  - CORS: 모든 origin/header/method 허용
+  - MyBatis: snake_case → camelCase 자동 매핑
+  - 기본 fetch size: 100건
+  - 로깅: DEBUG 레벨 (com.cj.freshway.*)
+  - Swagger UI: http://localhost:48081/fscps/swagger-ui.html
+  - Actuator: http://localhost:48081/fscps/actuator/health
+
+  기본값 규칙:
+    coId → null이면 "FW00" 자동 세팅
+    useYn → 기본 'Y'
+    syncStatus → 'C' (FS생성) 또는 'S' (에어스타생성)
+
+================================================================================

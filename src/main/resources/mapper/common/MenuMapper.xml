@@ -19,7 +19,7 @@
           FROM (
             SELECT a.prog_cd
                  , CASE WHEN b.prog_nm IS NOT NULL THEN b.prog_nm ELSE a.prog_nm END AS prog_nm
-                 , SUBSTRING(a.prog_no::varchar, 1, LENGTH(a.prog_no) - 2) AS up_prog_no
+                 , SUBSTRING(a.prog_no::varchar, 1, LENGTH(a.prog_no::varchar) - 2) AS up_prog_no
                  , a.prog_no
                  , #{progLvl} - 3 AS prog_lvl
                  , a.prog_url

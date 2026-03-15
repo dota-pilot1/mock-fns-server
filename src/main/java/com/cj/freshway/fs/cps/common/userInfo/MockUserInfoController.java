@@ -103,25 +103,6 @@ public class MockUserInfoController extends FscpsBaseController {
      * DB 조회 실패 시 하드코딩 폴백
      */
     private List<MenuDto> buildMenuListFallback() {
-        Map<String, Object> gnb = menuItem("!P!C-COM-FS-310100", "073101", "인천공항관리", "");
-        Map<String, Object> shopBase = menuItem("!P!C-COM-FS-31010400", "07310104", "매장 기준정보", "");
-        shopBase.put("subMenus", List.of(
-                menuItem("!P!C-COM-FS-31010401", "0731010401", "사용 매장(사이트) 관리", "pages/cps/base/shopmng/ShopMstrMng"),
-                menuItem("!P!C-COM-FS-31010405", "0731010405", "매장 스케줄 관리", "pages/cps/base/shopschedulemng/ShopScheduleMng"),
-                menuItem("!P!C-COM-FS-31010406", "0731010406", "매장 스케줄 긴급 설정", "pages/cps/base/shopschedulemng/ShopScheduleEmgcMng")
-        ));
-        gnb.put("subMenus", List.of(shopBase));
-        // MenuDto로 변환하지 않고 Map으로 반환 — 프론트에서는 필드명만 맞으면 동작
-        return List.of((MenuDto) null); // 실질적으로 도달하지 않는 코드
-    }
-
-    private Map<String, Object> menuItem(String id, String no, String menuName, String component) {
-        Map<String, Object> item = new LinkedHashMap<>();
-        item.put("id", id);
-        item.put("no", no);
-        item.put("menuName", menuName);
-        item.put("component", component);
-        item.put("active", false);
-        return item;
+        return Collections.emptyList();
     }
 }

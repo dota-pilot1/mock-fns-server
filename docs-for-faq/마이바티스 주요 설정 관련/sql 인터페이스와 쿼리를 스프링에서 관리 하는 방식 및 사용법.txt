@@ -1,0 +1,131 @@
+1. 스프링에서 마이 바티스 관련 인터페이스와 xml 을 인식 하는 방식 
+============================================================================================================================
+
+
+================================================================================
+  MyBatis Mapper 인터페이스와 XML 매핑 원리
+================================================================================
+
+■ 질문: ShopScheduleMapper.java(인터페이스)와 ShopScheduleMapper.xml이
+         어떻게 연결되는 건가?
+
+■ 답변: 3가지 설정이 조합되어 동작한다.
+
+
+================================================================================
+1. 설정 ① — @MapperScan (Java 인터페이스 등록)
+================================================================================
+
+  파일: MockScheduleServerApplication.java
+
+  @MapperScan({
+      "com.cj.freshway.fs.cps.airstar",        ← 이 패키지 하위의
+      "com.cj.freshway.fs.cps.common.code",       @Mapper 인터페이스를
+      "com.cj.freshway.fs.cps.common.userInfo"     모두 스캔하여 Bean 등록
+  })
+
+  ▶ 역할: 지정된 패키지들을 스캔해서 @Mapper가 붙은 인터페이스를 찾고,
+           Spring 컨테이너에 Bean으로 등록한다.
+  ▶ 없으면: Mapper 인터페이스를 @Autowired로 주입할 수 없다.
+
+  ※ @Mapper 어노테이션만 있어도 개별 등록은 되지만,
+     @MapperScan은 패키지 단위로 일괄 스캔하므로 더 편리하다.
+
+
+================================================================================
+2. 설정 ② — mybatis.mapper-locations (XML 파일 위치 지정)
+================================================================================
+
+  파일: application.yml
+
+  mybatis:
+    mapper-locations: classpath:mapper/**/*.xml    ← XML 매퍼 파일 경로
+    configuration:
+      map-underscore-to-camel-case: true           ← snake_case → camelCase
+      default-fetch-size: 100
+
+  ▶ 역할: MyBatis에게 "XML 매퍼 파일들이 어디에 있는지" 알려준다.
+  ▶ classpath:mapper/**/*.xml 의미:
+     resources/mapper/ 폴더 아래 모든 하위 폴더(**)의 *.xml 파일
+
+  실제 파일 위치:
+    src/main/resources/mapper/
+    ├── airstar/storemng/ShopScheduleMapper.xml      ← 매장 스케줄
+    ├── airstar/storemstmng/StoreMstMapper.xml        ← 매장 마스터
+    └── common/
+        ├── CmCodeMapper.xml                          ← 공통코드
+        └── MenuMapper.xml                            ← 메뉴
+
+
+================================================================================
+3. 설정 ③ — XML의 namespace (Java ↔ XML 연결 고리)
+================================================================================
+
+  파일: ShopScheduleMapper.xml
+
+  <mapper namespace="com.cj.freshway.fs.cps.airstar.storemng.ShopScheduleMapper">
+                     ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
+                     Java Mapper 인터페이스의 FQCN(풀 패키지명)과 정확히 일치해야 함!
+
+  ▶ 역할: 이 XML이 어떤 Java 인터페이스에 대응하는지 지정한다.
+  ▶ MyBatis는 namespace 값과 Java 인터페이스의 풀 패키지명을 비교하여 매칭한다.
+
+
+================================================================================
+4. 메서드 ↔ SQL 매핑 (id = 메서드명)
+================================================================================
+
+  Java 인터페이스:
+  ┌─────────────────────────────────────────────────────────────┐
+  │ List<ShopScheduleEntity> selectScheduleMonthList(dto);     │
+  │                          ^^^^^^^^^^^^^^^^^^^^^^^^           │
+  └──────────────────────────────┬──────────────────────────────┘
+                                 │ 메서드명이 일치
+                                 ▼
+  XML:
+  ┌─────────────────────────────────────────────────────────────┐
+  │ <select id="selectScheduleMonthList" ...>                  │
+  │             ^^^^^^^^^^^^^^^^^^^^^^^^                       │
+  │     SELECT co_id, store_id, ... FROM fscps.bs_airstar...   │
+  │ </select>                                                  │
+  └─────────────────────────────────────────────────────────────┘
+
+  매핑 규칙:
+    - XML의 <select|insert|update|delete>의 id 값
+    - = Java 인터페이스의 메서드명
+    - 이름이 다르면 "Invalid bound statement" 에러 발생
+
+
+==============================================================================================================================
+
+
+=================================================================================================================================
+
+
+2. 
+Service (22행)
+│  private final ShopScheduleMapper mapper;   ← Spring이 프록시 객체를 주입
+│
+│ (40행) mapper.selectScheduleMonthList(dto)  ← 일반 메서드 호출처럼 사용
+│        ↓
+│  MyBatis 프록시가 가로챔
+│        ↓
+│  namespace + id로 SQL 찾음
+│  "...ShopScheduleMapper" + "." + "selectScheduleMonthList"
+│        ↓
+│  ShopScheduleMapper.xml의 해당 <select> SQL 실행
+│        ↓
+│  결과를 ShopScheduleEntity로 매핑하여 List로 반환
+
+
+=========================================================================================================================
+
+핵심 실행:
+
+    @Transactional(readOnly = true)
+    public List<ShopScheduleEntity> selectScheduleMonthList(ShopScheduleSearchDto dto) {
+        log.debug("[Schedule] selectMonthList - storeId={}, month={}", dto.getStoreId(), dto.getSearchMonth());
+        return mapper.selectScheduleMonthList(dto);
+    }
+
+

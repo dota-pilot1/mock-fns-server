@@ -1,0 +1,144 @@
+---
+title: 매장 관리 테이블 관계도
+---
+erDiagram
+    bs_shop_m_if ||--o{ bs_ste_m_if : "1:N 점포→사이트"
+    bs_ste_m_if ||--o{ bs_crnr_m : "1:N 사이트→코너"
+
+    bs_shop_m_if ||--o{ bs_shop_cust_m_if : "1:N 점포→고객매핑"
+    bs_cust_m_if ||--o{ bs_shop_cust_m_if : "1:N 고객→매핑"
+
+    bs_org_m_if ||--o{ bs_shop_m_if : "1:N 조직→점포"
+    bs_emp_m_if ||--o{ bs_shop_m_if : "N:1 직원→점포관리"
+
+    bs_airstar_store ||--o{ bs_airstar_store_map : "1:N 매장→매핑"
+    bs_ste_m_if ||--o{ bs_airstar_store_map : "1:N 사이트→매핑(tp=1)"
+    bs_crnr_m ||--o{ bs_airstar_store_map : "1:N 코너→매핑(tp=2)"
+
+    bs_airstar_store ||--o{ bs_airstar_store_schedule : "1:N 매장→스케줄"
+    bs_airstar_store ||--o{ bs_airstar_store_img : "1:N 매장→이미지"
+    bs_airstar_store ||--o{ bs_airstar_store_seat : "1:N 매장→좌석"
+
+    bs_airstar_brand ||--o{ bs_airstar_store : "1:N 브랜드→매장"
+    bs_airstar_brand ||--o{ bs_airstar_platform_brand : "1:N 브랜드→플랫폼"
+
+    bs_airstar_store ||--o{ bs_icn_airport_shop_m : "1:1 매장→공항정보"
+
+    bs_shop_m_if {
+        varchar co_id PK "회사ID"
+        varchar shop_id PK "점포ID"
+        varchar shop_nm "점포명"
+        varchar bof_grp_id FK "조직ID"
+        varchar rpst_cust_id FK "고객사ID"
+        varchar shop_magr_id FK "관리자사번"
+    }
+
+    bs_ste_m_if {
+        varchar co_id PK "회사ID"
+        varchar shop_id PK-FK "점포ID"
+        varchar ste_id PK "사이트ID"
+        varchar ste_nm "사이트명"
+    }
+
+    bs_crnr_m {
+        varchar co_id PK "회사ID"
+        varchar shop_id PK "점포ID"
+        varchar ste_id PK-FK "사이트ID"
+        varchar crnr_id PK "코너ID"
+        varchar crnr_nm "코너명"
+    }
+
+    bs_airstar_store {
+        varchar co_id PK "회사ID"
+        varchar store_id PK "매장ID"
+        varchar upper_store_id "상위매장ID"
+        varchar store_type_cd "매장유형"
+        varchar brand_id FK "브랜드ID"
+        varchar store_name_ko "매장명(한)"
+        varchar store_name_en "매장명(영)"
+        varchar use_yn "사용여부"
+        varchar sync_status "연동상태"
+    }
+
+    bs_airstar_store_map {
+        varchar co_id PK "회사ID"
+        varchar store_id PK-FK "AIRSTAR매장ID"
+        varchar shop_id PK-FK "FW점포ID"
+        varchar ste_id PK-FK "FW사이트ID"
+        varchar crnr_id PK-FK "FW코너ID"
+        varchar store_tp PK "매핑유형(1사이트/2코너)"
+        varchar use_yn "사용여부"
+    }
+
+    bs_airstar_store_schedule {
+        varchar co_id PK "회사ID"
+        varchar store_id PK-FK "매장ID"
+        varchar schedule_date PK "일자(YYYYMMDD)"
+        varchar open_status "영업상태"
+        numeric schedule_priority "우선순위"
+        varchar open_time "오픈시간"
+        varchar close_time "마감시간"
+    }
+
+    bs_airstar_store_img {
+        varchar co_id PK "회사ID"
+        varchar store_id PK-FK "매장ID"
+        varchar image_id PK "이미지ID"
+        varchar image_url "이미지URL"
+        integer image_sequence "표시순서"
+    }
+
+    bs_airstar_store_seat {
+        varchar co_id PK "회사ID"
+        varchar store_id PK-FK "매장ID"
+        varchar seat_type PK "좌석유형"
+        integer display_sequence PK "표시순서"
+        integer max_people "최대인원"
+    }
+
+    bs_airstar_brand {
+        varchar co_id PK "회사ID"
+        varchar brand_code PK "브랜드코드"
+        varchar brand_id PK "브랜드ID"
+        varchar brand_name_kor "브랜드명(한)"
+        varchar brand_name_en "브랜드명(영)"
+    }
+
+    bs_airstar_platform_brand {
+        varchar co_id PK "회사ID"
+        varchar brand_code PK-FK "브랜드코드"
+        varchar standard_category_id PK "표준카테고리ID"
+    }
+
+    bs_icn_airport_shop_m {
+        varchar co_id PK "회사ID"
+        varchar ste_id PK "사이트ID"
+        varchar shop_id PK "점포ID"
+        varchar store_id PK-FK "매장ID"
+        varchar sales_unit_code "매출단위코드"
+        varchar store_type "매장유형(공항분류)"
+    }
+
+    bs_org_m_if {
+        varchar co_id PK "회사ID"
+        varchar org_id PK "조직ID"
+        varchar org_nm "조직명"
+    }
+
+    bs_cust_m_if {
+        varchar co_id PK "회사ID"
+        varchar cust_id PK "고객사ID"
+        varchar cust_nm "고객사명"
+        varchar bizno "사업자번호"
+    }
+
+    bs_emp_m_if {
+        varchar emp_no PK "사번"
+        varchar emp_nm "직원명"
+    }
+
+    bs_shop_cust_m_if {
+        varchar co_id PK "회사ID"
+        varchar shop_id PK-FK "점포ID"
+        varchar cust_id PK-FK "고객사ID"
+    }
