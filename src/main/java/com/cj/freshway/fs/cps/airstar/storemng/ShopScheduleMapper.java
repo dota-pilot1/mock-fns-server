@@ -20,4 +20,10 @@ public interface ShopScheduleMapper {
 
     /** 스케줄 수정 */
     int updateSchedule(ShopScheduleEntity entity);
+
+    /** 기간 스케줄 목록 조회 (긴급 설정) */
+    List<ShopScheduleEntity> selectScheduleRangeList(ShopScheduleSearchDto dto);
+
+    /** 스케줄 삭제 */
+    int deleteSchedule(ShopScheduleEntity entity);
 }

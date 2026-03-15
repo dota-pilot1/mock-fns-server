@@ -57,4 +57,26 @@ public class ShopScheduleService {
             mapper.insertSchedule(entity);
         }
     }
+
+    @Transactional(readOnly = true)
+    public List<ShopScheduleEntity> selectScheduleRangeList(ShopScheduleSearchDto dto) {
+        log.debug("[Schedule] selectRangeList - storeId={}, {}~{}", dto.getStoreId(), dto.getStartDate(), dto.getEndDate());
+        return mapper.selectScheduleRangeList(dto);
+    }
+
+    @Transactional
+    public void saveScheduleBatch(List<ShopScheduleEntity> list) {
+        for (ShopScheduleEntity entity : list) {
+            if (entity.getOpenStatus() != null) {
+                entity.setSchedulePriority(PRIORITY_MAP.getOrDefault(entity.getOpenStatus(), 9));
+            }
+
+            if ("D".equals(entity.getStatus())) {
+                log.debug("[Schedule] delete - storeId={}, date={}", entity.getStoreId(), entity.getScheduleDate());
+                mapper.deleteSchedule(entity);
+            } else {
+                saveSchedule(entity);
+            }
+        }
+    }
 }

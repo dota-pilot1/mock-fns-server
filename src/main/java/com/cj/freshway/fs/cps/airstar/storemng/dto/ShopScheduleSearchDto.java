@@ -8,4 +8,6 @@ public class ShopScheduleSearchDto {
     private String storeId;
     private String searchMonth;   // YYYYMM
     private String scheduleDate;  // YYYYMMDD
+    private String startDate;     // YYYYMMDD (긴급: 시작일)
+    private String endDate;       // YYYYMMDD (긴급: 종료일)
 }

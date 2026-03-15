@@ -63,4 +63,49 @@ public class ShopScheduleController extends FscpsBaseController {
         }
         return result;
     }
+
+    @Operation(summary = "기간 스케줄 목록 조회 (긴급)", description = "coId + storeId + startDate~endDate(YYYYMMDD)로 기간 내 스케줄 조회")
+    @PostMapping("v1.0/selectScheduleRangeList")
+    public Map<String, Object> selectScheduleRangeList(@RequestBody ShopScheduleSearchDto dto) {
+        log.info("[Schedule] selectScheduleRangeList - storeId={}, {}~{}", dto.getStoreId(), dto.getStartDate(), dto.getEndDate());
+
+        Map<String, Object> result = new HashMap<>();
+        try {
+            if (dto.getCoId() == null || dto.getCoId().isEmpty()) {
+                dto.setCoId("FW00");
+            }
+            List<ShopScheduleEntity> list = service.selectScheduleRangeList(dto);
+            result.put("code", "200");
+            result.put("data", list);
+        } catch (Exception e) {
+            log.error("기간 스케줄 조회 실패", e);
+            result.put("code", "500");
+            result.put("message", "스케줄 조회 실패");
+            result.put("data", null);
+        }
+        return result;
+    }
+
+    @Operation(summary = "스케줄 일괄 저장 (긴급)", description = "다건 스케줄 저장. status: C=신규, U=수정, D=삭제")
+    @PostMapping("v1.0/saveScheduleBatch")
+    public Map<String, Object> saveScheduleBatch(@RequestBody List<ShopScheduleEntity> list) {
+        log.info("[Schedule] saveScheduleBatch - count={}", list.size());
+
+        Map<String, Object> result = new HashMap<>();
+        try {
+            for (ShopScheduleEntity entity : list) {
+                if (entity.getCoId() == null || entity.getCoId().isEmpty()) {
+                    entity.setCoId("FW00");
+                }
+            }
+            service.saveScheduleBatch(list);
+            result.put("code", "200");
+            result.put("message", "저장되었습니다.");
+        } catch (Exception e) {
+            log.error("스케줄 일괄 저장 실패", e);
+            result.put("code", "500");
+            result.put("message", "스케줄 일괄 저장 실패");
+        }
+        return result;
+    }
 }
