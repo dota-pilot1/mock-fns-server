@@ -1,0 +1,495 @@
+================================================================================
+  실무 SQL 패턴 학습 가이드
+  (기준: cjfw-fscps-bo-api 매퍼 XML)
+================================================================================
+
+  이 프로젝트의 실무 SQL에서 자주 등장하는 패턴을 난이도순으로 정리.
+  모든 예시는 실제 매퍼 XML에서 가져온 것.
+
+
+================================================================================
+1. 동적 SQL — <if>, <choose>, <when>                            난이도: ★☆☆☆☆
+================================================================================
+
+  MyBatis가 조건에 따라 SQL을 다르게 조립하는 기능.
+  Java의 if/else와 같다.
+
+  ▶ <if> — 조건이 참이면 SQL 포함
+  ─────────────────────────────────────────────────────────────
+  파일: PrmtRegMngMapper.xml
+
+    <if test="prmtStartDt != null and prmtStartDt != ''">
+      AND BPM.PRMT_START_DT BETWEEN #{prmtStartDt} AND #{prmtTmntDt}
+    </if>
+
+  → 검색 조건이 있으면 WHERE에 추가, 없으면 생략
+  → 프론트에서 검색폼 값이 비어있을 때 전체 조회가 되는 이유
+
+
+  ▶ <choose> <when> <otherwise> — if / else if / else
+  ─────────────────────────────────────────────────────────────
+  파일: MenuOptMngMapper.xml
+
+    <choose>
+        <when test="optUprc != null and optUprc != ''">
+            , CAST(REPLACE(#{optUprc}, ',', '') AS BIGINT)
+        </when>
+        <otherwise>
+            , null
+        </otherwise>
+    </choose>
+
+  → 가격 값이 있으면 콤마 제거 후 숫자로 변환, 없으면 null
+
+
+================================================================================
+2. CASE WHEN — SQL 안의 if/else                                난이도: ★★☆☆☆
+================================================================================
+
+  SQL 실행 중 값에 따라 다른 결과를 반환.
+
+  ▶ 기본형
+  ─────────────────────────────────────────────────────────────
+  파일: SaleUprcChngReqRegMapper.xml
+
+    CASE WHEN MNU.MENU_TYPE_CD = '1' THEN 'FP040'
+         WHEN MNU.MENU_TYPE_CD = '2' THEN 'FP041'
+         WHEN MNU.MENU_TYPE_CD = '3' THEN 'FP041'
+         ELSE ''
+    END
+
+  → 메뉴 유형 코드에 따라 다른 분류코드 매핑
+
+
+  ▶ CASE WHEN + 집계함수 (피벗 패턴)
+  ─────────────────────────────────────────────────────────────
+  파일: SalesCalcAdjMapper.xml
+
+    SUM(CASE WHEN EXT.EXRT_TYPE_CD = 'USD'
+             THEN COALESCE(S01.SALES_AMT, 0) ELSE 0 END) AS USD_SALES_AMT,
+    SUM(CASE WHEN EXT.EXRT_TYPE_CD = 'EUR'
+             THEN COALESCE(S01.SALES_AMT, 0) ELSE 0 END) AS EUR_SALES_AMT,
+    SUM(CASE WHEN EXT.EXRT_TYPE_CD = 'JPY'
+             THEN COALESCE(S01.SALES_AMT, 0) ELSE 0 END) AS JPY_SALES_AMT,
+    SUM(CASE WHEN EXT.EXRT_TYPE_CD = 'CNY'
+             THEN COALESCE(S01.SALES_AMT, 0) ELSE 0 END) AS CNY_SALES_AMT
+
+  → 행(row)으로 된 통화별 매출을 열(column)로 피벗
+  → 엑셀의 피벗 테이블과 같은 효과
+  → 실무에서 매우 자주 나오는 패턴
+
+
+  ▶ CASE WHEN + 취소 처리
+  ─────────────────────────────────────────────────────────────
+  파일: ClosingAdjMapper.xml
+
+    SUM(CASE WHEN position('취소' in C.comm_cd_nm) >= 1
+             THEN M.GDOH_AMT * -1
+             ELSE M.GDOH_AMT END)
+
+  → '취소' 건이면 금액을 마이너스로 처리
+  → 매출 합계에서 취소분을 빼는 로직
+
+
+================================================================================
+3. COALESCE — null 방어                                        난이도: ★☆☆☆☆
+================================================================================
+
+  null이면 기본값으로 대체. 실무에서 모든 금액 계산에 필수.
+
+  ▶ 기본형
+  ─────────────────────────────────────────────────────────────
+    COALESCE(h.cust_nm, d.ste_nm) AS cust_nm
+
+  → 고객사명이 null이면 사이트명으로 대체
+
+
+  ▶ 중첩 COALESCE + 환율 계산
+  ─────────────────────────────────────────────────────────────
+  파일: SalesCalcAdjMapper.xml
+
+    CEIL(
+      COALESCE(ADJ.USD_RCV_AF_AMT, COALESCE(V02.USD_SALES_AMT, 0))
+      * V02.USD_EXRT / V02.USD_EXRT_UNIT
+    )
+
+  → 조정금액이 있으면 그걸 사용, 없으면 원래 매출액 사용
+  → 그것도 없으면 0
+  → 환율 곱하고 올림(CEIL)
+
+
+================================================================================
+4. EXISTS / NOT EXISTS — 존재 여부 체크                        난이도: ★★☆☆☆
+================================================================================
+
+  서브쿼리 결과가 있는지/없는지만 체크. JOIN보다 성능이 좋은 경우가 많음.
+
+  ▶ EXISTS — "해당하는 건이 있는 것만"
+  ─────────────────────────────────────────────────────────────
+  파일: ClosingAdjMapper.xml
+
+    AND EXISTS (
+        SELECT 1
+        FROM FSCPS.CM_CODE_M_IF Z
+        WHERE Z.COMM_CL_CD  = 'FS620'
+          AND Z.COMM_CD      = X.SAP_SND_STTS_CD
+          AND Z.CHARTR_REF2  = '1'
+    )
+
+  → SAP 전송 상태가 특정 코드에 해당하는 건만 필터링
+  → SELECT 1: 값은 중요하지 않고 존재 여부만 확인
+
+
+  ▶ EXISTS + 동적 SQL 결합
+  ─────────────────────────────────────────────────────────────
+  파일: SalesLedgerRtrvMapper.xml
+
+    <if test='steOperCd != null and steOperCd != ""'>
+        AND EXISTS (
+            SELECT 1
+            FROM fscps.cm_code_m_if Z
+            WHERE Z.COMM_CL_CD = 'OPTGBCODE'
+              AND Z.COMM_CD    = d.ste_oper_shp_cd
+              AND Z.UP_COMM_CD = #{steOperCd}
+        )
+    </if>
+
+  → 검색 조건이 있을 때만 EXISTS 체크 추가
+
+
+  ▶ EXISTS + 다중 JOIN (복잡)
+  ─────────────────────────────────────────────────────────────
+  파일: SaleUprcChngReqRegMapper.xml
+
+    AND EXISTS(
+        SELECT 1
+        FROM   FSCPS.BS_CRNR_M BCM
+            INNER JOIN FSCPS.BS_CRNR_MENU_M CMM
+                ON CMM.CO_ID   = BCM.CO_ID
+                AND CMM.CRNR_ID = BCM.CRNR_ID
+                AND CMM.MENU_ID = SMM.MENU_ID
+        WHERE BCM.CO_ID  = SMM.CO_ID
+          AND (BCM.CRNR_ID ILIKE CONCAT('%', #{crnrIdNm}, '%')
+               OR BCM.CRNR_NM ILIKE CONCAT('%', #{crnrIdNm}, '%'))
+    )
+
+  → 코너ID 또는 코너명으로 검색할 때
+  → EXISTS 안에서 JOIN까지 하는 패턴
+
+
+  ▶ NOT EXISTS — "해당하는 건이 없는 것만"
+  ─────────────────────────────────────────────────────────────
+  파일: SaleUprcChngReqRegMapper.xml
+
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM FSCPS.BS_STE_SALE_UPRC_REQ_ALL_S EXT
+        WHERE EXT.CO_ID   = WML.CO_ID
+          AND EXT.STE_ID  = WML.STE_ID
+          AND EXT.MENU_ID = WML.MENU_ID
+    )
+
+  → 이미 등록된 건은 제외하고 신규 건만 INSERT
+
+
+================================================================================
+5. <foreach> — 반복 처리                                       난이도: ★★★☆☆
+================================================================================
+
+  Java의 for문처럼 리스트를 순회하며 SQL 생성.
+
+  ▶ UNION ALL로 임시 테이블 생성
+  ─────────────────────────────────────────────────────────────
+  파일: SaleUprcChngReqRegMapper.xml
+
+    WITH W_MENU_LIST AS
+    <foreach collection="list" item="item"
+             open="(" close=")" separator="UNION ALL">
+        SELECT #{item.coId}     AS CO_ID
+             , #{item.steId}    AS STE_ID
+             , #{item.menuId}   AS MENU_ID
+             , CAST(REPLACE(#{item.reqSaleUprc}, ',', '') AS BIGINT) AS REQ_SALE_UPRC
+             , #{item.regrId}   AS REGR_ID
+    </foreach>
+
+  → 프론트에서 여러 건을 한꺼번에 보낼 때
+  → foreach로 UNION ALL을 만들어서 임시 테이블(CTE)로 사용
+  → 이후 이 CTE를 INSERT나 UPDATE에 활용
+
+  생성되는 SQL:
+    WITH W_MENU_LIST AS (
+        SELECT 'FW00' AS CO_ID, '2650' AS STE_ID, 'M001' AS MENU_ID ...
+        UNION ALL
+        SELECT 'FW00' AS CO_ID, '2650' AS STE_ID, 'M002' AS MENU_ID ...
+        UNION ALL
+        SELECT 'FW00' AS CO_ID, '2650' AS STE_ID, 'M003' AS MENU_ID ...
+    )
+
+
+================================================================================
+6. Window 함수 — ROW_NUMBER, PARTITION BY                      난이도: ★★★☆☆
+================================================================================
+
+  그룹 내에서 순번 매기기, 최신 건 가져오기 등에 사용.
+
+  ▶ ROW_NUMBER + PARTITION BY — 그룹별 최신 1건 가져오기
+  ─────────────────────────────────────────────────────────────
+  파일: SalesCalcAdjMapper.xml
+
+    SELECT ...
+         , ROW_NUMBER() OVER(
+               PARTITION BY SLE.CO_ID, SLE.SHOP_ID, SLE.STE_ID,
+                            SLE.SALES_DT, EXT.EXRT_TYPE_CD
+               ORDER BY EXT.POS_ADAPTN_DT DESC
+           ) R_NUM
+    FROM ...
+    ) V01
+    WHERE V01.R_NUM = 1
+
+  → 매장별, 통화별로 가장 최근 환율을 가져오기
+  → PARTITION BY = 그룹 기준 (GROUP BY와 비슷하지만 행을 합치지 않음)
+  → ORDER BY DESC = 최신순 정렬
+  → R_NUM = 1 = 각 그룹의 첫 번째(최신) 건만 선택
+
+
+  ▶ ROW_NUMBER — 단순 행 번호
+  ─────────────────────────────────────────────────────────────
+  파일: SalesLedgerRtrvMapper.xml
+
+    ROW_NUMBER() OVER (
+        ORDER BY c.org_id, b.shop_id, d.ste_id, a.sales_dt DESC
+    ) AS row_num
+
+  → 조회 결과에 순번 부여 (그리드의 No. 컬럼)
+
+
+  ▶ 서브쿼리에서 ROW_NUMBER로 최신/최초 단가 가져오기
+  ─────────────────────────────────────────────────────────────
+  파일: SaleUprcChngReqRegMapper.xml
+
+    LEFT OUTER JOIN (
+        SELECT CO_ID, STE_ID, MENU_ID, SALE_UPRC,
+               ROW_NUMBER() OVER(
+                   PARTITION BY CO_ID, STE_ID, MENU_ID
+                   ORDER BY ADAPTN_START_DT
+               ) ROW_NUM
+        FROM FSCPS.BS_STE_SALE_UPRC_S
+    ) SSU
+        ON SSU.CO_ID = SMM.CO_ID AND SSU.ROW_NUM = 1
+
+  → 메뉴별 "최초 적용 단가"를 가져오기
+  → ORDER BY ASC + ROW_NUM = 1 = 가장 오래된 건
+
+
+================================================================================
+7. WITH (CTE) — 복잡한 쿼리 나누기                             난이도: ★★★★☆
+================================================================================
+
+  긴 쿼리를 단계별로 나눠서 읽기 좋게 만드는 패턴.
+  임시 테이블처럼 사용.
+
+  ▶ CTE 체인 — 단계별 데이터 가공
+  ─────────────────────────────────────────────────────────────
+  파일: SalesLedgerRtrvMapper.xml
+
+    WITH pay_sales AS (
+        -- 1단계: 결제 매출 기본 데이터
+        SELECT DISTINCT m.co_id, m.shop_id, m.ste_id, m.sales_dt, m.cust_id
+        FROM fscps.sa_closing_daily_sales_m m
+        INNER JOIN fwsafsd.TFMCL006 fm006 ON ...
+        WHERE m.co_id = #{coId}
+          AND m.del_yn = 'N'
+          AND m.sales_dt BETWEEN ... AND ...
+    ),
+    card_summary AS (
+        -- 2단계: 카드 매출 집계
+        SELECT m.shop_id, m.ste_id, m.sales_dt, m.cust_id,
+               SUM(m.tot_sales_amt) AS sales_amt
+        FROM fscps.sa_closing_daily_sales_m m
+        WHERE m.blnc_cl_cd = '23'
+        GROUP BY m.shop_id, m.ste_id, m.sales_dt, m.cust_id
+    ),
+    cash_summary AS (
+        -- 3단계: 현금 매출 집계
+        ...
+    ),
+    oncrdt_summary AS (
+        -- 4단계: 외상 매출 집계
+        ...
+    )
+    -- 최종: 전체 조합
+    SELECT ...
+    FROM pay_sales a
+        LEFT JOIN card_summary e ON ...
+        LEFT JOIN cash_summary f ON ...
+        LEFT JOIN oncrdt_summary g ON ...
+
+  → 결제수단별로 따로 집계한 후 하나로 합침
+  → CTE 없이 쓰면 서브쿼리가 중첩되어 읽기 매우 어려움
+
+
+================================================================================
+8. UPSERT — 있으면 UPDATE, 없으면 INSERT                       난이도: ★★★★☆
+================================================================================
+
+  이 프로젝트에서 2가지 패턴을 사용.
+
+  ▶ 패턴 A: ON CONFLICT (PostgreSQL 표준)
+  ─────────────────────────────────────────────────────────────
+  파일: ClosingAdjMapper.xml
+
+    INSERT INTO fscps.SA_CLOSING_ADJ_M (
+        CO_ID, SHOP_ID, OCCR_DT, PRDD_RSD_AMT, CASH_GDOH_AMT, ...
+    ) VALUES (
+        #{coId}, #{shopId}, #{occrDt}, COALESCE(#{prddRsdAmt}, 0), ...
+    )
+    ON CONFLICT (CO_ID, SHOP_ID, OCCR_DT)
+    DO UPDATE SET
+        PRDD_RSD_AMT  = COALESCE(#{prddRsdAmt}, 0),
+        CASH_GDOH_AMT = COALESCE(#{cashGdohAmt}, 0),
+        UPDT_DTTM     = NOW(),
+        UPDT_ID       = ''
+
+  → PK 충돌 시 UPDATE, 아니면 INSERT
+  → 가장 깔끔한 방식
+
+
+  ▶ 패턴 A-2: ON CONFLICT + 누적 합산
+  ─────────────────────────────────────────────────────────────
+  파일: MnulSalesAggRegMapper.xml
+
+    INSERT INTO FSCPS.SA_STE_POS_SALES_S (...) VALUES (...)
+    ON CONFLICT (CO_ID, SALES_DT, SHOP_ID, STE_ID, POS_NO,
+                 DEAL_TYPE_CD, REG_TYPE_CD)
+    DO UPDATE SET
+        SALES_CNT = fscps.SA_STE_POS_SALES_S.SALES_CNT + 1,
+        SALES_AMT = fscps.SA_STE_POS_SALES_S.SALES_AMT + #{salesAmt},
+        MENU_SALES_QTY = fscps.SA_STE_POS_SALES_S.MENU_SALES_QTY + #{menuSalesQty}
+
+  → 충돌 시 기존 값에 새 값을 더함 (누적 집계)
+  → POS 매출 데이터를 건건이 쌓을 때 유용
+
+
+  ▶ 패턴 B: WITH UPSERT AS (UPDATE ... RETURNING) + INSERT WHERE NOT EXISTS
+  ─────────────────────────────────────────────────────────────
+  파일: SalesCalcAdjMapper.xml
+
+    WITH UPSERT AS (
+        UPDATE FSCPS.SA_CALC_ADJ_M
+        SET USD_RCV_AF_AMT = #{usdRcvAfAmt},
+            EUR_RCV_AF_AMT = #{eurRcvAfAmt},
+            UPDT_DTTM      = NOW()
+        WHERE CO_ID = #{coId}
+          AND SHOP_ID = #{shopId}
+          AND STE_ID  = #{steId}
+          AND SALES_DT = #{salesDt}
+        RETURNING *
+    )
+    INSERT INTO FSCPS.SA_CALC_ADJ_M (...)
+    SELECT #{coId}, #{shopId}, #{steId}, #{salesDt}, ...
+    WHERE NOT EXISTS (SELECT * FROM UPSERT)
+
+  → 먼저 UPDATE 시도, 성공하면 RETURNING으로 결과 반환
+  → UPDATE된 행이 없으면 (NOT EXISTS) INSERT 실행
+  → ON CONFLICT보다 복잡하지만 UPDATE 조건을 유연하게 설정 가능
+
+
+================================================================================
+9. 다중 JOIN + 서브쿼리 조합                                   난이도: ★★★★☆
+================================================================================
+
+  실무에서 가장 흔하면서도 가장 읽기 어려운 패턴.
+
+  ▶ 7개 테이블 JOIN + 서브쿼리 JOIN
+  ─────────────────────────────────────────────────────────────
+  파일: SaleUprcChngReqRegMapper.xml
+
+    FROM FSCPS.BS_STE_MENU_M SMM                           -- ① 사이트 메뉴
+        INNER JOIN FSCPS.BS_MENU_M_IF MNU ON ...           -- ② 메뉴 마스터
+        LEFT JOIN FSCPS.BS_STE_SALE_UPRC_REQ_ALL_S SRA ON ... -- ③ 단가 요청
+        LEFT JOIN FSCPS.BS_SALE_UPRC_GDR_S GDR ON ...     -- ④ 단가 가이드
+        LEFT JOIN (
+            SELECT CO_ID, STE_ID, MENU_ID, SALE_UPRC,
+                   ROW_NUMBER() OVER(...) ROW_NUM          -- 서브쿼리 + 윈도우함수
+            FROM FSCPS.BS_STE_SALE_UPRC_S
+        ) SSU ON SSU.ROW_NUM = 1                           -- ⑤ 현재 단가
+        LEFT JOIN (...) EXP ON EXP.ROW_NUM = 1             -- ⑥ 만료 단가
+        LEFT JOIN FSCPS.BS_USER_M_IF ACK ON ...            -- ⑦ 승인자
+        LEFT JOIN FSCPS.CM_CODE_M_IF CM06 ON ...           -- ⑧ 코드명
+        LEFT JOIN FSCPS.CM_CODE_M_IF CM71 ON ...           -- ⑨ 상태명
+        LEFT JOIN FSCPS.CM_CODE_M_IF CMCL ON ...           -- ⑩ 분류명
+
+  → 같은 코드 테이블(CM_CODE_M_IF)을 3번 JOIN (각각 다른 코드 분류)
+  → 서브쿼리 안에서 ROW_NUMBER로 최신/최초 단가를 가져옴
+
+  읽는 팁:
+    - 메인 테이블(FROM 바로 뒤)부터 파악
+    - INNER JOIN = 필수 관계, LEFT JOIN = 있으면 가져오기
+    - 서브쿼리 JOIN은 안쪽부터 읽기
+    - 별칭(alias)을 메모하면서 읽기
+
+
+================================================================================
+10. SELECT 절 서브쿼리 (스칼라 서브쿼리)                       난이도: ★★★☆☆
+================================================================================
+
+  SELECT 안에 또 SELECT를 넣는 패턴.
+
+  ▶ 결제수단별 합계를 각각 서브쿼리로
+  ─────────────────────────────────────────────────────────────
+  파일: PosSalesRegMapper.xml
+
+    SELECT
+        (SELECT COALESCE(SUM(SALES_AMT), 0)
+         FROM FSCPS.SA_PAY_SALES_CASH_S
+         WHERE CO_ID = #{coId} AND SHOP_ID = #{shopId}
+           AND STE_ID = #{steId} AND SALES_DT = #{salesDt}
+        ) AS AMT1,                                          -- 현금 합계
+
+        (SELECT COALESCE(SUM(SALES_AMT), 0)
+         FROM FSCPS.SA_PAY_SALES_CARD_S
+         WHERE CO_ID = #{coId} AND SHOP_ID = #{shopId} ...
+        ) AS AMT2,                                          -- 카드 합계
+
+        (SELECT COALESCE(SUM(SALES_AMT), 0)
+         FROM FSCPS.SA_PAY_SALES_ONCRDT_S ...
+        ) AS AMT3                                           -- 외상 합계
+
+  → 서로 다른 테이블에서 같은 조건으로 합계를 가져올 때
+  → CTE나 UNION으로도 가능하지만 간단한 경우 이 방식이 읽기 쉬움
+
+
+================================================================================
+11. 학습 순서 추천
+================================================================================
+
+  ┌──────┬──────────────────────────┬──────────┬──────────────────────────┐
+  │ 순서 │ 패턴                     │ 난이도   │ 먼저 볼 파일             │
+  ├──────┼──────────────────────────┼──────────┼──────────────────────────┤
+  │  1   │ COALESCE                 │ ★       │ 어디서든                 │
+  │  2   │ 동적 SQL <if> <choose>   │ ★       │ PrmtRegMngMapper         │
+  │  3   │ CASE WHEN                │ ★★     │ ClosingAdjMapper         │
+  │  4   │ EXISTS / NOT EXISTS      │ ★★     │ SaleUprcChngReqRegMapper │
+  │  5   │ <foreach>                │ ★★★   │ PrmtRegMngMapper         │
+  │  6   │ ROW_NUMBER + PARTITION   │ ★★★   │ SalesCalcAdjMapper       │
+  │  7   │ 스칼라 서브쿼리          │ ★★★   │ PosSalesRegMapper        │
+  │  8   │ WITH (CTE)               │ ★★★★ │ SalesLedgerRtrvMapper    │
+  │  9   │ UPSERT (ON CONFLICT)     │ ★★★★ │ ClosingAdjMapper         │
+  │ 10   │ 다중 JOIN + 서브쿼리     │ ★★★★ │ SaleUprcChngReqRegMapper │
+  └──────┴──────────────────────────┴──────────┴──────────────────────────┘
+
+  매퍼 파일 위치:
+    cjfw-fscps-bo-api/src/main/resources/mappers/cps/
+    ├── base/
+    │   ├── prmtregmng/PrmtRegMngMapper.xml          ← 프로모션 관리
+    │   ├── saleuprcchngreqreg/SaleUprcChngReqRegMapper.xml  ← 단가 변경 요청
+    │   ├── menuoptmng/MenuOptMngMapper.xml           ← 메뉴 옵션 관리
+    │   └── cponmng/CponMstMngMapper.xml              ← 쿠폰 관리
+    └── closing/closingmng/
+        ├── SalesLedgerRtrvMapper.xml                 ← 매출 원장 조회
+        ├── SalesCalcAdjMapper.xml                    ← 정산 조정 (환율)
+        ├── ClosingAdjMapper.xml                      ← 마감 조정
+        ├── PosSalesRegMapper.xml                     ← POS 매출 등록
+        └── MnulSalesAggRegMapper.xml                 ← 수동 매출 집계
+
+================================================================================

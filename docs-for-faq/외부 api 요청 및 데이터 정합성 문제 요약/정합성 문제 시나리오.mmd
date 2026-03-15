@@ -1,0 +1,35 @@
+---
+title: 매장 저장 프로세스 — 단계별 실패 시 정합성 문제
+---
+flowchart TD
+    A[관리자가 매장 정보 저장 클릭] --> B{activate_yn = Y?}
+
+    B -->|No| FAIL0[❌ 문제: API 호출 자체를 안 함\n관리자가 활성화 잊으면 영구 미연동\n앱에 매장 안 나옴]
+
+    B -->|Yes| C[1단계: DB 트랜잭션 시작]
+    C --> D[2단계: DB INSERT/UPDATE\nsync_status = C or U]
+
+    D --> E{DB 저장 성공?}
+    E -->|실패| FAIL1[❌ 문제 없음\nDB 롤백 — 양쪽 다 변경 없음\n정합성 유지됨]
+
+    E -->|성공| F[3단계: 미들웨어 API 호출\nRestTemplate → gwmsqa.ifresh.co.kr]
+
+    F --> G{API 응답?}
+
+    G -->|타임아웃| FAIL2[⚠️ 문제: DB 커넥션 점유 지속\nAPI 응답 대기 중 트랜잭션 안 끝남\n다른 사용자 요청도 느려짐\n커넥션 풀 고갈 위험]
+
+    G -->|실패 응답| FAIL3[⚠️ 문제: DB와 앱 데이터 불일치\nDB: 새 데이터 저장됨\nAIRSTAR 앱: 이전 데이터 그대로\nsync_status = C/U 유지\n재시도 배치 미구현 — 수동 확인 필요]
+
+    G -->|성공| H[4단계: sync_status = S 업데이트]
+
+    H --> I{sync_status 업데이트 성공?}
+    I -->|실패| FAIL4[⚠️ 문제: 실제 동기화는 됐는데\nsync_status가 C/U로 남음\n다음 수정 시 중복 전송 가능]
+
+    I -->|성공| J[✅ 정상 완료\nDB: 새 데이터 + sync=S\nAIRSTAR 앱: 새 데이터 반영\n양쪽 데이터 일치]
+
+    style FAIL0 fill:#fff3cd,stroke:#cc9900
+    style FAIL1 fill:#d4edda,stroke:#28a745
+    style FAIL2 fill:#ffcccc,stroke:#cc0000
+    style FAIL3 fill:#ffcccc,stroke:#cc0000
+    style FAIL4 fill:#ffe0b2,stroke:#e65100
+    style J fill:#d4edda,stroke:#28a745

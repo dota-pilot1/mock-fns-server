@@ -1,0 +1,32 @@
+---
+title: sync_status 상태 전이 다이어그램
+---
+stateDiagram-v2
+    [*] --> C: 매장 신규 등록
+    [*] --> N: 매장 등록 (activate=N)
+
+    C --> S: API 호출 성공
+    C --> C: API 호출 실패 (재시도 대기)
+
+    S --> U: 매장 정보 수정
+    U --> S: API 호출 성공
+    U --> U: API 호출 실패 (재시도 대기)
+
+    N --> C: activate_yn을 Y로 변경
+
+    state C {
+        [*] --> 대기중
+        대기중 --> [*]: ⚠️ 재시도 배치 미구현
+    }
+
+    note right of C
+        현재 문제: C/U 상태에서
+        실패와 미전송 구분 불가
+        E(Error) 상태 추가 필요
+    end note
+
+    note right of N
+        activate_yn=N이면
+        API 호출 자체를 안 함
+        관리자가 잊으면 영구 미연동
+    end note
